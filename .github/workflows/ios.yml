@@ -39,22 +39,20 @@ jobs:
           cat << EOF > /tmp/tauri_wrapper/cargo
           #!/bin/bash
           REAL_CARGO=\$(which -a cargo | grep -v "/tmp/tauri_wrapper" | head -n 1)
-          if [ -z "\$REAL_CARGO" ]; then
-            echo ">>> [Cargo Hook] 致命错误：找不到真实的 cargo！"
-            exit 1
-          fi
+          if [ -z "\$REAL_CARGO" ]; then echo "找不到 cargo!"; exit 1; fi
           "\$REAL_CARGO" "\$@"
           EXIT_CODE=\$?
           if [ \$EXIT_CODE -ne 0 ]; then exit \$EXIT_CODE; fi
-          if [[ "\$*" == *"--target aarch64-apple-ios"* ]] && [[ "\$*" == *"--lib"* ]]; then
-            echo ">>> [Cargo Hook] iOS 静态库编译完成，开始寻找 Lua 产物..."
-            TARGET_DIR="$REPO_DIR/src-tauri/target"
-            LIBAPP_FILE=\$(find "\$TARGET_DIR" -path "*/aarch64-apple-ios/release/libapp.a" 2>/dev/null | head -n 1)
+          if [[ "\$*" == *"--target aarch64-apple-ios"* ]]; then
+            echo ">>> [Cargo Hook] iOS 编译结束！正在 gen/apple 中扫描产物..."
+            GEN_DIR="$REPO_DIR/src-tauri/gen/apple"
+            LIBAPP_FILE=\$(find "\$GEN_DIR" -name "libapp.a" 2>/dev/null | head -n 1)
             if [ -f "\$LIBAPP_FILE" ]; then
-              LUA_LIB=\$(find "\$TARGET_DIR" -name "liblua*.a" -path "*/build/*" 2>/dev/null | head -n 1)
+              echo ">>> [Cargo Hook] 成功捕获 libapp.a: \$LIBAPP_FILE"
+              LUA_LIB=\$(find "\$GEN_DIR" -name "liblua*.a" -path "*/build/*" 2>/dev/null | head -n 1)
               INJECTED=0
               if [ -n "\$LUA_LIB" ]; then
-                echo ">>> [Cargo Hook] 找到 vendored 库: \$LUA_LIB，正在暴力注入..."
+                echo ">>> [Cargo Hook] 找到 vendored Lua: \$LUA_LIB，正在解包注入..."
                 TEMP_DIR=\$(mktemp -d)
                 cd "\$TEMP_DIR"
                 ar x "\$LUA_LIB"
@@ -62,22 +60,23 @@ jobs:
                 ranlib "\$LIBAPP_FILE"
                 INJECTED=1
               else
-                echo ">>> [Cargo Hook] 没找到 liblua.a，尝试找散落的 .o..."
-                LUA_O_FILES=\$(find "\$TARGET_DIR" -path "*/build/lua*" -name "*.o" 2>/dev/null)
+                LUA_O_FILES=\$(find "\$GEN_DIR" -path "*/build/lua*" -name "*.o" 2>/dev/null)
                 if [ -n "\$LUA_O_FILES" ]; then
+                  echo ">>> [Cargo Hook] 找到散落的 Lua .o 文件，正在强行缝合..."
                   ar rcs "\$LIBAPP_FILE" \$LUA_O_FILES
                   ranlib "\$LIBAPP_FILE"
                   INJECTED=1
                 fi
               fi
               if [ \$INJECTED -eq 1 ]; then
-                echo ">>> [Cargo Hook] 大功告成！Lua C 符号已缝合进 libapp.a！"
+                echo ">>> [Cargo Hook] 大功告成！Lua 符号已强行植入 libapp.a！"
               else
-                echo ">>> [Cargo Hook] 警告：找不到 Lua 的任何 C 产物！正在打印 build 目录："
-                find "\$TARGET_DIR" -maxdepth 4 -type d -name "build" -exec ls -l {} \; 2>/dev/null || true
+                echo ">>> [Cargo Hook] 破案了！mlua 的 vendored 根本没生成 C 产物！"
+                echo ">>> [Cargo Hook] 正在打印 gen/apple 下的 build 目录结构："
+                find "\$GEN_DIR" -type d -name "build" -exec ls -l {} \; 2>/dev/null || true
               fi
             else
-              echo ">>> [Cargo Hook] 错误：找不到 libapp.a！期望路径前缀: \$TARGET_DIR"
+              echo ">>> [Cargo Hook] 致命：gen/apple 下找不到 libapp.a！"
             fi
           fi
           exit \$EXIT_CODE
