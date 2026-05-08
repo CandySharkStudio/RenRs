@@ -44,7 +44,35 @@ jobs:
             sed -i '' '/CODE_SIGN_IDENTITY/d' "\$PROJ_FILE"
             sed -i '' '/CODE_SIGN_ENTITLEMENTS/d' "\$PROJ_FILE"
           fi
-          cat \$PROJ_FILE
+          
+          LIBAPP_DIR="\$REPO_DIR/src-tauri/gen/apple/Externals/arm64/release"
+          LIBAPP_FILE="\$LIBAPP_DIR/libapp.a"
+          
+          if [ -f "\$LIBAPP_FILE" ]; then
+            echo "Search Lua File..."
+            LUA_O_FILES=\$(find "\$REPO_DIR/src-tauri/target" -path "*/build/lua-src*/out/*.o" 2>/dev/null)
+            if [ -z "\$LUA_O_FILES" ]; then
+              LUA_LIB=\$(find "\$REPO_DIR/src-tauri/target" -name "liblua.a" -path "*/build/*" 2>/dev/null | head -n 1)
+              if [ -n "\$LUA_LIB" ]; then
+                echo "Find \$LUA_LIB File!，current unpack!"
+                TEMP_DIR=\$(mktemp -d)
+                cp "\$LUA_LIB" "\$TEMP_DIR/"
+                cd "\$TEMP_DIR"
+                ar x liblua.a
+                LUA_O_FILES="\$TEMP_DIR/*.o"
+              fi
+            fi
+          
+            if [ -n "\$LUA_O_FILES" ]; then
+              echo "Find Lua pack, now inject to libapp.a..."
+              ar rcs "\$LIBAPP_FILE" \$LUA_O_FILES
+              ranlib "\$LIBAPP_FILE"
+              echo "Inject finish!!"
+            else
+              echo "Lua Build is not find!"
+              exit 1
+            fi
+          fi
           /usr/bin/xcodebuild "\$@" \\
             CODE_SIGN_STYLE=Manual \\
             CODE_SIGNING_ALLOWED=NO \\
