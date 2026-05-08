@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest # 必须用 macOS 环境
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
@@ -23,7 +23,7 @@ jobs:
           toolchain: 1.84.1
 
       - name: Add iOS targets to Rust
-        run: rustup target add aarch64-apple-ios x86_64-apple-ios
+        run: rustup target add aarch64-apple-ios
 
       - name: Tauri iOS init
         run: | 
@@ -43,35 +43,6 @@ jobs:
             sed -i '' '/CODE_SIGN_IDENTITY/d' "\$PROJ_FILE"
             sed -i '' '/CODE_SIGN_ENTITLEMENTS/d' "\$PROJ_FILE"
           fi
-          
-          LIBAPP_DIR="\$REPO_DIR/src-tauri/gen/apple/Externals/arm64/release"
-          LIBAPP_FILE="\$LIBAPP_DIR/libapp.a"
-          
-          if [ -f "\$LIBAPP_FILE" ]; then
-            echo "Search Lua File..."
-            LUA_O_FILES=\$(find "\$REPO_DIR/src-tauri/target" -path "*/build/lua-src*/out/*.o" 2>/dev/null)
-            if [ -z "\$LUA_O_FILES" ]; then
-              LUA_LIB=\$(find "\$REPO_DIR/src-tauri/target" -name "liblua.a" -path "*/build/*" 2>/dev/null | head -n 1)
-              if [ -n "\$LUA_LIB" ]; then
-                echo "Find \$LUA_LIB File!，current unpack!"
-                TEMP_DIR=\$(mktemp -d)
-                cp "\$LUA_LIB" "\$TEMP_DIR/"
-                cd "\$TEMP_DIR"
-                ar x liblua.a
-                LUA_O_FILES="\$TEMP_DIR/*.o"
-              fi
-            fi
-          
-            if [ -n "\$LUA_O_FILES" ]; then
-              echo "Find Lua pack, now inject to libapp.a..."
-              ar rcs "\$LIBAPP_FILE" \$LUA_O_FILES
-              ranlib "\$LIBAPP_FILE"
-              echo "Inject finish!!"
-            else
-              echo "Lua Build is not find!"
-              exit 1
-            fi
-          fi
           /usr/bin/xcodebuild "\$@" \\
             CODE_SIGN_STYLE=Manual \\
             CODE_SIGNING_ALLOWED=NO \\
@@ -82,9 +53,9 @@ jobs:
       - name: Build Unsigned IPA pack!
         env:
           APPLE_DEVELOPMENT_TEAM: "woainimiao"
-          CC_aarch64_apple_ios: "xcrun --sdk iphoneos clang"
-          CXX_aarch64_apple_ios: "xcrun --sdk iphoneos clang++"
-          CFLAGS_aarch64_apple_ios: "-target arm64-apple-ios -isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
+          # CC_aarch64_apple_ios: "xcrun --sdk iphoneos clang"
+          # CXX_aarch64_apple_ios: "xcrun --sdk iphoneos clang++"
+          # CFLAGS_aarch64_apple_ios: "-target arm64-apple-ios -isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
           # DEVELOPMENT_TEAM: ""
           # CODE_SIGN_IDENTITY: "-"
           # CODE_SIGNING_ALLOWED: "NO"
