@@ -62,7 +62,6 @@ jobs:
           # PROVISIONING_PROFILE_SPECIFIER: ""
         run: |
           export PATH="/tmp/tauri_wrapper:$PATH"
-          cargo clean
           bun tauri ios build
 
       - name: Package Unsigned .ipa
