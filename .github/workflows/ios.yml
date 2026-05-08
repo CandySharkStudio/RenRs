@@ -32,14 +32,6 @@ jobs:
           bun tauri ios init
           bun tauri icon
 
-      - name: Pre-compile Rust to generate vendored Lua library
-        run: |
-          cd src-tauri
-          cargo build --target aarch64-apple-ios --release --lib 2>&1 | tail -10 || true
-          LUA_A=$(find ./target/aarch64-apple-ios -name "liblua54.a" 2>/dev/null | head -1)
-          echo "Lua lib path: $LUA_A"
-          echo "LUA_LIB_DIR=$(dirname "$LUA_A")" >> "$GITHUB_ENV"
-
       - name: Setup Fake Xcodebuild Wrapper
         run: |
           mkdir -p /tmp/tauri_wrapper
@@ -47,6 +39,7 @@ jobs:
           #!/bin/bash
           PROJ_FILE="$REPO_DIR/src-tauri/gen/apple/ren-rs.xcodeproj/project.pbxproj"
           if [ -f "\$PROJ_FILE" ]; then
+            sed -i '' 's/OTHER_LDFLAGS = (/OTHER_LDFLAGS = ("-llua",/g' "$PROJ_FILE"
             sed -i '' 's/DEVELOPMENT_TEAM = ".*";/DEVELOPMENT_TEAM = "";/g' "\$PROJ_FILE"
             sed -i '' '/CODE_SIGN_IDENTITY/d' "\$PROJ_FILE"
             sed -i '' '/CODE_SIGN_ENTITLEMENTS/d' "\$PROJ_FILE"
@@ -55,15 +48,17 @@ jobs:
             CODE_SIGN_STYLE=Manual \\
             CODE_SIGNING_ALLOWED=NO \\
             CODE_SIGNING_REQUIRED=NO \\
-            PROVISIONING_PROFILE_SPECIFIER="" \\
-            "LIBRARY_SEARCH_PATHS=\$(LIBRARY_SEARCH_PATHS) $LUA_LIB_DIR"
+            PROVISIONING_PROFILE_SPECIFIER=""
           EOF
           chmod +x /tmp/tauri_wrapper/xcodebuild
       - name: Build Unsigned IPA pack!
         env:
           APPLE_DEVELOPMENT_TEAM: "woainimiao"
-          # CC_aarch64_apple_ios: "xcrun --sdk iphoneos clang"
-          # CXX_aarch64_apple_ios: "xcrun --sdk iphoneos clang++"
+          CC_aarch64_apple_ios: "xcrun --sdk iphoneos clang"
+          CXX_aarch64_apple_ios: "xcrun --sdk iphoneos clang++"
+          AR_aarch64_apple_ios: "xcrun --sdk iphoneos ar"
+          LUA_SRC_TARGET_OS: ios
+          CARGO_TARGET_AARCH64_APPLE_IOS_LINKER: "xcrun --sdk iphoneos clang"
           # CFLAGS_aarch64_apple_ios: "-target arm64-apple-ios -isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
           # DEVELOPMENT_TEAM: ""
           # CODE_SIGN_IDENTITY: "-"
@@ -72,6 +67,9 @@ jobs:
           # PROVISIONING_PROFILE_SPECIFIER: ""
         run: |
           export PATH="/tmp/tauri_wrapper:$PATH"
+          bun tauri ios build --no-bundle
+          mkdir -p src-tauri/gen/apple/Externals/arm64/release
+          find target/aarch64-apple-ios/release/build -name "liblua.a" -exec cp {} src-tauri/gen/apple/Externals/arm64/release/liblua.a \;
           bun tauri ios build
 
       - name: Package Unsigned .ipa
