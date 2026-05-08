@@ -67,7 +67,7 @@ jobs:
           # PROVISIONING_PROFILE_SPECIFIER: ""
         run: |
           export PATH="/tmp/tauri_wrapper:$PATH"
-          bun tauri ios build --no-bundle
+          bun tauri ios build -- --no-bundle
           mkdir -p src-tauri/gen/apple/Externals/arm64/release
           find target/aarch64-apple-ios/release/build -name "liblua.a" -exec cp {} src-tauri/gen/apple/Externals/arm64/release/liblua.a \;
           bun tauri ios build
