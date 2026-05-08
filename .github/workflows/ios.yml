@@ -39,7 +39,7 @@ jobs:
 
           cat << 'EOF' > /tmp/tauri_wrapper/cargo
           #!/bin/bash
-          REAL_CARGO=/usr/bin/cargo
+          REAL_CARGO=~/.cargo/bin/cargo
           "$REAL_CARGO" "$@"
           EXIT_CODE=$?
           if [ $EXIT_CODE -ne 0 ]; then exit$EXIT_CODE; fi
