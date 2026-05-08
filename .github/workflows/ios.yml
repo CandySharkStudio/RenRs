@@ -35,55 +35,6 @@ jobs:
       - name: Setup Fake Xcodebuild Wrapper
         run: |
           mkdir -p /tmp/tauri_wrapper
-          export REPO_DIR="${GITHUB_WORKSPACE:-$PWD}"
-          cat << EOF > /tmp/tauri_wrapper/cargo
-          #!/bin/bash
-          REAL_CARGO=\$(which -a cargo | grep -v "/tmp/tauri_wrapper" | head -n 1)
-          if [ -z "\$REAL_CARGO" ]; then echo "找不到 cargo!"; exit 1; fi
-          "\$REAL_CARGO" "\$@"
-          EXIT_CODE=\$?
-          if [ \$EXIT_CODE -ne 0 ]; then exit \$EXIT_CODE; fi
-          if [[ "\$1" == "build" || "\$1" == "rustc" ]]; then
-            GEN_DIR="\$REPO_DIR/src-tauri/gen/apple"
-            LIBAPP_FILES=\$(find "\$GEN_DIR" -name "libapp.a" 2>/dev/null)
-            for LIBAPP_FILE in \$LIBAPP_FILES; do
-              HAS_LUA=\$(nm "\$LIBAPP_FILE" 2>/dev/null | grep "_luaL_checkstack" | head -n 1)
-              if [ -z "\$HAS_LUA" ]; then
-                echo ">>> [Cargo Hook] 捕获残缺 libapp.a: \$LIBAPP_FILE，开始注入 Lua..."
-                LUA_LIB=\$(find "\$GEN_DIR" -name "liblua*.a" 2>/dev/null | head -n 1)
-                INJECTED=0
-                if [ -n "\$LUA_LIB" ]; then
-                  echo ">>> [Cargo Hook] 找到现成 Lua 库: \$LUA_LIB"
-                  TEMP_DIR=\$(mktemp -d)
-                  cd "\$TEMP_DIR"
-                  ar x "\$LUA_LIB"
-                  ar rcs "\$LIBAPP_FILE" *.o
-                  ranlib "\$LIBAPP_FILE"
-                  INJECTED=1
-                else
-                  echo ">>> [Cargo Hook] 没找到 liblua.a，寻找散落 .o..."
-                  LUA_O_FILES=\$(find "\$GEN_DIR" -name "*.o" -path "*lua*" 2>/dev/null)
-                  if [ -n "\$LUA_O_FILES" ]; then
-                    ar rcs "\$LIBAPP_FILE"\$LUA_O_FILES
-                    ranlib "\$LIBAPP_FILE"
-                    INJECTED=1
-                  fi
-                fi
-                if [ \$INJECTED -eq 1 ]; then
-                  echo ">>> [Cargo Hook] 注入成功！Xcode 链接器这次闭嘴了！"
-                else
-                  echo ">>> [Cargo Hook] 彻底破案：gen/apple 下连一个 Lua 的 .o 都没有！mlua vendored 根本没编译 C 代码！"
-                  echo ">>> [Cargo Hook] 目录下所有产物："
-                  find "\$GEN_DIR" \( -name "*.a" -o -name "*.o" \) 2>/dev/null | head -n 20
-                fi
-              else
-                echo ">>> [Cargo Hook] \$LIBAPP_FILE 体检健康，已包含 Lua。"
-              fi
-            done
-          fi
-          exit \$EXIT_CODE
-          EOF
-          chmod +x /tmp/tauri_wrapper/cargo
           cat << EOF > /tmp/tauri_wrapper/xcodebuild
           #!/bin/bash
           PROJ_FILE="$REPO_DIR/src-tauri/gen/apple/ren-rs.xcodeproj/project.pbxproj"
@@ -131,6 +82,9 @@ jobs:
       - name: Build Unsigned IPA pack!
         env:
           APPLE_DEVELOPMENT_TEAM: "woainimiao"
+          CC_aarch64_apple_ios: "xcrun --sdk iphoneos clang"
+          CXX_aarch64_apple_ios: "xcrun --sdk iphoneos clang++"
+          CFLAGS_aarch64_apple_ios: "-target arm64-apple-ios -isysroot $(xcrun --sdk iphoneos --show-sdk-path)"
           # DEVELOPMENT_TEAM: ""
           # CODE_SIGN_IDENTITY: "-"
           # CODE_SIGNING_ALLOWED: "NO"
