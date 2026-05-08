@@ -38,7 +38,7 @@ jobs:
           export REPO_DIR="${GITHUB_WORKSPACE:-$PWD}"
           cat << 'EOF' > /tmp/tauri_wrapper/cargo
           #!/bin/bash
-          REAL_CARGO=\$(which -a cargo | grep -v "/tmp/tauri_wrapper" | head -n 1)
+          REAL_CARGO=$(which -a cargo | grep -v "/tmp/tauri_wrapper" | head -n 1)
           if [ -z "\$REAL_CARGO" ]; then echo "找不到 cargo!"; exit 1; fi
           "\$REAL_CARGO" "\$@"
           EXIT_CODE=\$?
