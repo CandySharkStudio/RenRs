@@ -32,6 +32,14 @@ jobs:
           bun tauri ios init
           bun tauri icon
 
+      - name: Pre-compile Rust to generate vendored Lua library
+        run: |
+          cd src-tauri
+          cargo build --target aarch64-apple-ios --release --lib 2>&1 | tail -10 || true
+          LUA_A=$(find ./target/aarch64-apple-ios -name "liblua54.a" 2>/dev/null | head -1)
+          echo "Lua lib path: $LUA_A"
+          echo "LUA_LIB_DIR=$(dirname "$LUA_A")" >> "$GITHUB_ENV"
+
       - name: Setup Fake Xcodebuild Wrapper
         run: |
           mkdir -p /tmp/tauri_wrapper
@@ -47,7 +55,8 @@ jobs:
             CODE_SIGN_STYLE=Manual \\
             CODE_SIGNING_ALLOWED=NO \\
             CODE_SIGNING_REQUIRED=NO \\
-            PROVISIONING_PROFILE_SPECIFIER=""
+            PROVISIONING_PROFILE_SPECIFIER="" \\
+            "LIBRARY_SEARCH_PATHS=\$(LIBRARY_SEARCH_PATHS) $LUA_LIB_DIR"
           EOF
           chmod +x /tmp/tauri_wrapper/xcodebuild
       - name: Build Unsigned IPA pack!
