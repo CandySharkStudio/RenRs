@@ -35,51 +35,52 @@ jobs:
       - name: Setup Fake Xcodebuild Wrapper
         run: |
           mkdir -p /tmp/tauri_wrapper
-          REPO_DIR="$PWD"
-
-          cat << 'EOF' > /tmp/tauri_wrapper/cargo
+          export REPO_DIR="${GITHUB_WORKSPACE:-$PWD}"
+          cat << EOF > /tmp/tauri_wrapper/cargo
           #!/bin/bash
-          REAL_CARGO=~/.cargo/bin/cargo
-          "$REAL_CARGO" "$@"
-          EXIT_CODE=$?
-          if [ $EXIT_CODE -ne 0 ]; then exit$EXIT_CODE; fi
-          if [[ "$*" == *"--target aarch64-apple-ios"* ]] && [[ "$*" == *"--lib"* ]]; then
-            echo ">>> [Cargo Hook] iOS 静态库编译完成，正在检查 mlua 符号..."
-            TARGET_DIR="$PWD/src-tauri/target"
-            LIBAPP_FILE=$(find "$TARGET_DIR" -path "*/aarch64-apple-ios/release/libapp.a" 2>/dev/null | head -n 1)
-            if [ -f "$LIBAPP_FILE" ]; then
-              LUA_LIB=$(find "$TARGET_DIR" -name "liblua*.a" -path "*/build/*" 2>/dev/null | head -n 1)
+          REAL_CARGO=\$(which -a cargo | grep -v "/tmp/tauri_wrapper" | head -n 1)
+          if [ -z "\$REAL_CARGO" ]; then
+            echo ">>> [Cargo Hook] 致命错误：找不到真实的 cargo！"
+            exit 1
+          fi
+          "\$REAL_CARGO" "\$@"
+          EXIT_CODE=\$?
+          if [ \$EXIT_CODE -ne 0 ]; then exit \$EXIT_CODE; fi
+          if [[ "\$*" == *"--target aarch64-apple-ios"* ]] && [[ "\$*" == *"--lib"* ]]; then
+            echo ">>> [Cargo Hook] iOS 静态库编译完成，开始寻找 Lua 产物..."
+            TARGET_DIR="$REPO_DIR/src-tauri/target"
+            LIBAPP_FILE=\$(find "\$TARGET_DIR" -path "*/aarch64-apple-ios/release/libapp.a" 2>/dev/null | head -n 1)
+            if [ -f "\$LIBAPP_FILE" ]; then
+              LUA_LIB=\$(find "\$TARGET_DIR" -name "liblua*.a" -path "*/build/*" 2>/dev/null | head -n 1)
               INJECTED=0
-              if [ -n "$LUA_LIB" ]; then
-                echo ">>> [Cargo Hook] 发现 vendored 产物: $LUA_LIB，正在解包并注入..."
-                TEMP_DIR=$(mktemp -d)
-                cd "$TEMP_DIR"
-                ar x "$LUA_LIB"
-                # 把 .o 文件强行合并进 libapp.a
-                ar rcs "$LIBAPP_FILE" *.o
-                ranlib "$LIBAPP_FILE"
+              if [ -n "\$LUA_LIB" ]; then
+                echo ">>> [Cargo Hook] 找到 vendored 库: \$LUA_LIB，正在暴力注入..."
+                TEMP_DIR=\$(mktemp -d)
+                cd "\$TEMP_DIR"
+                ar x "\$LUA_LIB"
+                ar rcs "\$LIBAPP_FILE" *.o
+                ranlib "\$LIBAPP_FILE"
                 INJECTED=1
               else
-                echo ">>> [Cargo Hook] 没找到 liblua.a，尝试寻找散落的 .o 文件..."
-                LUA_O_FILES=$(find "$TARGET_DIR" -path "*/build/lua*" -name "*.o" 2>/dev/null)
-                if [ -n "$LUA_O_FILES" ]; then
-                  ar rcs "$LIBAPP_FILE"$LUA_O_FILES
-                  ranlib "$LIBAPP_FILE"
+                echo ">>> [Cargo Hook] 没找到 liblua.a，尝试找散落的 .o..."
+                LUA_O_FILES=\$(find "\$TARGET_DIR" -path "*/build/lua*" -name "*.o" 2>/dev/null)
+                if [ -n "\$LUA_O_FILES" ]; then
+                  ar rcs "\$LIBAPP_FILE" \$LUA_O_FILES
+                  ranlib "\$LIBAPP_FILE"
                   INJECTED=1
                 fi
               fi
-              if [ $INJECTED -eq 1 ]; then
-                echo ">>> [Cargo Hook] 成功！Lua C 符号已物理缝合进 libapp.a，Xcode 现在无话可说了！"
+              if [ \$INJECTED -eq 1 ]; then
+                echo ">>> [Cargo Hook] 大功告成！Lua C 符号已缝合进 libapp.a！"
               else
-                echo ">>> [Cargo Hook] 警告：mlua 的 vendored 根本没有生成任何 C 产物！"
-                echo ">>> [Cargo Hook] 正在打印 build 目录结构，帮您排查原因："
-                find "$TARGET_DIR" -maxdepth 4 -type d -name "build" -exec ls -l {} \; 2>/dev/null || true
+                echo ">>> [Cargo Hook] 警告：找不到 Lua 的任何 C 产物！正在打印 build 目录："
+                find "\$TARGET_DIR" -maxdepth 4 -type d -name "build" -exec ls -l {} \; 2>/dev/null || true
               fi
             else
-              echo ">>> [Cargo Hook] 错误：找不到 libapp.a！"
+              echo ">>> [Cargo Hook] 错误：找不到 libapp.a！期望路径前缀: \$TARGET_DIR"
             fi
           fi
-          exit $EXIT_CODE
+          exit \$EXIT_CODE
           EOF
           chmod +x /tmp/tauri_wrapper/cargo
           cat << EOF > /tmp/tauri_wrapper/xcodebuild
